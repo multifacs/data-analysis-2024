@@ -1,0 +1,243 @@
+- Загрузите необходимые данные из файла hw2.shelepin.data.xlsx
+```{r}
+library(readxl)
+hw2_data <- read_excel("hw2.shelepin.data.xlsx", 
+    sheet = "activity")
+
+summary(hw2_data)
+```
+- Рассчитайте описательные статистики и заполните таблицу
+```{r}
+library(dplyr)
+
+result <- hw2_data %>%
+  group_by(type) %>%
+  summarise(
+    Среднее = mean(rate),
+    Дисперсия = var(rate),
+    Стандартное_отклонение = sd(rate),
+    Объем_выборки = n(),
+    Минимум = min(rate),
+    Максимум = max(rate)
+  )
+
+# Вывод результата
+print(result)
+```
+
+- Преобразуйте фактор таким образом, чтобы категории следовали в порядке роста средней активности амилазы. Переименуйте имена категорий для более компактного отображения на графиках (сократите имена, можно использовать аббревиатуры)
+```{r}
+# Рассчитаем средние значения для каждой ассоциации
+means <- aggregate(rate ~ type, data = hw2_data, FUN = mean)
+means <- means[order(means$rate), ]  # сортируем по возрастанию средних
+
+# Создаем словарь сокращений
+abbreviations <- c(
+  "белково-бургерная" = "ББ",
+  "раздельное питание" = "РП",
+  "средиземноморская" = "СМ",
+  "фруктово-ягодно-овощная" = "ФЯО"
+)
+
+# Создаем новый фактор с правильным порядком и сокращениями
+hw2_data$type_n <- factor(hw2_data$type, 
+                           levels = means$type,
+                           labels = abbreviations[means$type])
+
+# Проверяем результат
+levels(hw2_data$type_n)  # покажет новые уровни фактора в правильном порядке
+```
+- Новая таблица
+```{r}
+result <- hw2_data %>%
+  group_by(type_n) %>%
+  summarise(
+    Среднее = mean(rate),
+    Дисперсия = var(rate),
+    Стандартное_отклонение = sd(rate),
+    Объем_выборки = n(),
+    Минимум = min(rate),
+    Максимум = max(rate)
+  )
+
+# Вывод результата
+print(result)
+```
+
+- Сформируйте модель дисперсионного анализа исследуемой зависимости
+
+```{r}
+# Создаем модель дисперсионного анализа
+fit <- lm(rate ~ type_n, data = hw2_data)
+
+# Выводим результаты
+summary(fit)
+```
+
+```{r}
+# Получаем остатки из модели
+residuals <- residuals(fit)
+
+# 1. Критерий Шапиро-Уилка
+shapiro_test <- shapiro.test(residuals)
+
+# 2. Критерий Колмогорова-Смирнова
+# Сначала стандартизируем остатки
+standardized_residuals <- scale(residuals)
+ks_test <- ks.test(standardized_residuals, "pnorm")
+
+# 3. Критерий Андерсона-Дарлинга
+library(nortest)
+ad_test <- ad.test(residuals)
+```
+
+```{r}
+# Выводим результаты
+cat("Тест Шапиро-Уилка: p =", shapiro_test$p.value, "\n")
+```
+
+```{r}
+# Выводим результаты
+cat("Тест Колмогорова-Смирнова: p =", ks_test$p.value, "\n")
+```
+
+```{r}
+# Выводим результаты
+cat("Тест Андерсона-Дарлинга: p =", ad_test$p.value, "\n")
+```
+
+```{r}
+# Гистограмма остатков
+# Визуальная проверка
+# Q-Q график
+qqnorm(residuals)
+```
+
+
+```{r}
+# Гистограмма остатков
+hist(residuals, freq = FALSE)
+```
+
+Тест Шапиро-Уилка: p = 0.01024024
+Это значение меньше стандартного уровня значимости 0.05. Следовательно, мы отвергаем нулевую гипотезу о нормальности распределения. Данные, вероятно, не распределены нормально.
+Тест Колмогорова-Смирнова: p = 0.1802803
+Это значение больше 0.05, что означает, что мы не можем отвергнуть нулевую гипотезу. Согласно этому тесту, данные могут быть нормально распределены.
+Тест Андерсона-Дарлинга: p = 0.001824153
+Это значение значительно меньше 0.05, что снова приводит к отвержению нулевой гипотезы о нормальности.
+Вывод:
+Два из трех тестов (Шапиро-Уилка и Андерсона-Дарлинга) указывают на то, что данные, вероятно, не распределены нормально. Тест Колмогорова-Смирнова не отвергает гипотезу о нормальности, но он менее мощный для обнаружения отклонений от нормальности по сравнению с другими двумя тестами.
+
+```{r}
+kruskal.test(rate ~ type_n, data = hw2_data)
+```
+
+1. P-значение (0.001594) значительно меньше стандартного уровня значимости 0.05. Это означает, что мы отвергаем нулевую гипотезу.
+2. Нулевая гипотеза в тесте Краскела-Уоллиса предполагает, что все группы имеют одинаковое распределение (или одинаковые медианы).
+3. Отвержение нулевой гипотезы указывает на то, что существуют статистически значимые различия между группами.
+
+Вывод:
+Существуют статистически значимые различия в распределении переменной "rate" между четырьмя группами, определенными переменной "type_n". Иными словами, тип (type_n) оказывает существенное влияние на показатель rate.
+
+```{r}
+pairwise.wilcox.test(hw2_data$rate, hw2_data$type_n)
+```
+
+
+```{r}
+library(emmeans)
+library(multcomp)
+library(multcompView)
+
+# set up model
+model <- lm(rate ~ type_n, data = hw2_data)
+
+# get (adjusted) weight means per group
+model_means <- emmeans(object = model,
+                       specs = "type_n")
+
+# add letters to each mean
+model_means_cld <- cld(object = model_means,
+                       Letters = letters,
+                       alpha = 0.05)
+
+# show output
+model_means_cld
+```
+
+```{r}
+library(tidyverse) # ggplot & helper functions
+library(scales)    # more helper functions
+
+# optional: sort factor levels of groups column according to highest mean
+
+# ...in means table
+model_means_cld <- model_means_cld %>% 
+  mutate(type_n = fct_reorder(type_n, emmean))
+
+# ...in data table
+hw2_data <- hw2_data %>% 
+  mutate(type_n = fct_relevel(type_n, levels(model_means_cld$type_n)))
+
+# base plot setup
+ggplot() +
+  # y-axis
+  scale_y_continuous(
+    name = "Rate",
+    limits = c(0, NA),
+    breaks = pretty_breaks(),
+    expand = expansion(mult = c(0,0.1))
+  ) +
+  # x-axis
+  scale_x_discrete(
+    name = "Type"
+  ) +
+  # general layout
+  theme_classic() +
+  # colored boxplots (вместо черного)
+  geom_boxplot(
+    data = hw2_data,
+    aes(y = rate, x = type_n, fill = type_n),
+    width = 0.5
+  ) +
+  # добавляем цветовую палитру
+  scale_fill_brewer(palette = "Set3") +
+  # black data points
+  geom_point(
+    data = hw2_data,
+    aes(y = rate, x = type_n),
+    shape = 16,
+    alpha = 0.5,
+    position = position_jitter(width = 0.1)
+  ) +
+  # red letters
+  geom_text(
+    data = model_means_cld,
+    aes(
+      y = emmean,
+      x = type_n,
+      label = str_trim(.group)
+    ),
+    position = position_nudge(x = 0, y = -24),
+    hjust = 0.5,
+    color = "red"
+  ) +
+  # добавляем стрелку сверху
+  annotate("segment", 
+           x = 1, 
+           xend = length(unique(hw2_data$type_n)), 
+           y = max(hw2_data$rate) + 2, 
+           yend = max(hw2_data$rate) + 2,
+           arrow = arrow(length = unit(0.5, "cm"))) +
+  annotate("text", 
+           x = length(unique(hw2_data$type_n))/2, 
+           y = max(hw2_data$rate) + 6,
+           label = "Увеличение средней активности") +
+  # убираем легенду
+  theme(legend.position = "none") +
+  # caption
+  labs(
+    caption = str_wrap("Black dots represent raw data.Means not sharing any letter are significantly different by the Tukey-test at the 5% level of significance.", width = 70)
+  )
+```
+

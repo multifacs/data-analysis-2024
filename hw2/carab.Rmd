@@ -1,0 +1,243 @@
+- Загрузите необходимые данные из файла hw2.shelepin.data.xlsx
+```{r}
+library(readxl)
+hw2_data <- read_excel("hw2.shelepin.data.xlsx", 
+    sheet = "carab")
+summary(hw2_data)
+```
+- Рассчитайте описательные статистики и заполните таблицу
+```{r}
+library(dplyr)
+
+result <- hw2_data %>%
+  group_by(association) %>%
+  summarise(
+    Среднее = mean(length),
+    Дисперсия = var(length),
+    Стандартное_отклонение = sd(length),
+    Объем_выборки = n(),
+    Минимум = min(length),
+    Максимум = max(length)
+  )
+
+# Вывод результата
+print(result)
+```
+
+- Преобразуйте фактор таким образом, чтобы категории следовали в порядке роста средней активности амилазы. Переименуйте имена категорий для более компактного отображения на графиках (сократите имена, можно использовать аббревиатуры)
+```{r}
+# Рассчитаем средние значения для каждой ассоциации
+means <- aggregate(length ~ association, data = hw2_data, FUN = mean)
+means <- means[order(means$length), ]  # сортируем по возрастанию средних
+
+# Создаем словарь сокращений
+abbreviations <- c(
+  "Березняк разнотравно-осоковый" = "БРО",
+  "Кленовник снытево-осоково-разнотравный" = "КСОР",
+  "Буковник копытне-снытевый" = "БКС",
+  "Осинник подмаренниково-снытевый" = "ОПС",
+  "Дубняк снытево-разнотравный" = "ДСР",
+  "Кленовник высокотравно-снытевый" = "КВС"
+)
+
+# Создаем новый фактор с правильным порядком и сокращениями
+hw2_data$association_new <- factor(hw2_data$association, 
+                           levels = means$association,
+                           labels = abbreviations[means$association])
+
+# Проверяем результат
+levels(hw2_data$association_new)  # покажет новые уровни фактора в правильном порядке
+```
+- Новая таблица
+```{r}
+result <- hw2_data %>%
+  group_by(association_new) %>%
+  summarise(
+    Среднее = mean(length),
+    Дисперсия = var(length),
+    Стандартное_отклонение = sd(length),
+    Объем_выборки = n(),
+    Минимум = min(length),
+    Максимум = max(length)
+  )
+
+# Вывод результата
+print(result)
+```
+
+- Сформируйте модель дисперсионного анализа исследуемой зависимости
+
+```{r}
+# Создаем модель дисперсионного анализа
+fit <- lm(length ~ association_new, data = hw2_data)
+
+# Выводим результаты
+summary(fit)
+```
+```{r}
+# Получаем остатки из модели
+residuals <- residuals(fit)
+
+# 1. Критерий Шапиро-Уилка
+shapiro_test <- shapiro.test(residuals)
+
+# 2. Критерий Колмогорова-Смирнова
+# Сначала стандартизируем остатки
+standardized_residuals <- scale(residuals)
+ks_test <- ks.test(standardized_residuals, "pnorm")
+
+# 3. Критерий Андерсона-Дарлинга
+library(nortest)
+ad_test <- ad.test(residuals)
+```
+
+```{r}
+# Выводим результаты
+cat("Тест Шапиро-Уилка: p =", shapiro_test$p.value, "\n")
+```
+
+```{r}
+# Выводим результаты
+cat("Тест Колмогорова-Смирнова: p =", ks_test$p.value, "\n")
+```
+
+```{r}
+# Выводим результаты
+cat("Тест Андерсона-Дарлинга: p =", ad_test$p.value, "\n")
+```
+
+Поскольку все три теста показывают p > 0.05 (0.86, 0.96 и 0.87 соответственно), распределение остатков можно считать нормальным.
+```{r}
+library(car)
+leveneTest(length ~ association_new, hw2_data)
+```
+
+F = 1.4893, p > 0.2
+
+```{r}
+anova(fit)
+```
+
+```{r}
+pairwise.t.test(hw2_data$length, hw2_data$association_new)
+```
+
+
+На основе результатов теста Тьюки (α = 0.05) можно выделить следующие статистически значимые различия между парами ассоциаций (p < 0.05):
+
+Буковник копытне-снытевый - Березняк разнотравно-осоковый (p = 0.0003)
+Дубняк снытево-разнотравный - Березняк разнотравно-осоковый (p = 0.0023)
+Кленовник снытево-осоково-разнотравный - Березняк разнотравно-осоковый (p < 0.0001)
+Осинник подмаренниково-снытевый - Березняк разнотравно-осоковый (p < 0.0001)
+Дубняк снытево-разнотравный - Буковник копытне-снытевый (p < 0.0001)
+Кленовник высокотравно-снытевый - Дубняк снытево-разнотравный (p < 0.0001)
+Кленовник снытево-осоково-разнотравный - Дубняк снытево-разнотравный (p < 0.0001)
+Осинник подмаренниково-снытевый - Дубняк снытево-разнотравный (p < 0.0001)
+Кленовник снытево-осоково-разнотравный - Кленовник высокотравно-снытевый (p = 0.0004)
+Осинник подмаренниково-снытевый - Кленовник высокотравно-снытевый (p < 0.0001)
+Не обнаружено статистически значимых различий между следующими парами (p > 0.05):
+
+Кленовник высокотравно-снытевый - Березняк разнотравно-осоковый (p = 0.5877)
+Кленовник высокотравно-снытевый - Буковник копытне-снытевый (p = 0.0955)
+Кленовник снытево-осоково-разнотравный - Буковник копытне-снытевый (p = 0.5108)
+Осинник подмаренниково-снытевый - Буковник копытне-снытевый (p = 0.0751)
+Осинник подмаренниково-снытевый - Кленовник снытево-осоково-разнотравный (p = 0.8525)
+
+```{r}
+library(emmeans)
+library(multcomp)
+library(multcompView)
+
+# set up model
+model <- lm(length ~ association_new, data = hw2_data)
+
+# get (adjusted) weight means per group
+model_means <- emmeans(object = model,
+                       specs = "association_new")
+
+# add letters to each mean
+model_means_cld <- cld(object = model_means,
+                       Letters = letters,
+                       alpha = 0.05)
+
+# show output
+model_means_cld
+```
+
+```{r}
+library(tidyverse) # ggplot & helper functions
+library(scales)    # more helper functions
+
+# optional: sort factor levels of groups column according to highest mean
+
+# ...in means table
+model_means_cld <- model_means_cld %>% 
+  mutate(association_new = fct_reorder(association_new, emmean))
+
+# ...in data table
+hw2_data <- hw2_data %>% 
+  mutate(association_new = fct_relevel(association_new, levels(model_means_cld$association_new)))
+
+# base plot setup
+ggplot() +
+  # y-axis
+  scale_y_continuous(
+    name = "Length",
+    limits = c(0, NA),
+    breaks = pretty_breaks(),
+    expand = expansion(mult = c(0,0.1))
+  ) +
+  # x-axis
+  scale_x_discrete(
+    name = "Association"
+  ) +
+  # general layout
+  theme_classic() +
+  # colored boxplots (вместо черного)
+  geom_boxplot(
+    data = hw2_data,
+    aes(y = length, x = association_new, fill = association_new),
+    width = 0.5,
+    outlier.shape = NA
+  ) +
+  # добавляем цветовую палитру
+  scale_fill_brewer(palette = "Set3") +
+  # black data points
+  geom_point(
+    data = hw2_data,
+    aes(y = length, x = association_new),
+    shape = 16,
+    alpha = 0.5,
+    position = position_jitter(width = 0.1)
+  ) +
+  # red letters
+  geom_text(
+    data = model_means_cld,
+    aes(
+      y = emmean,
+      x = association_new,
+      label = str_trim(.group)
+    ),
+    position = position_nudge(x = 0, y = -3),
+    hjust = 0.5,
+    color = "red"
+  ) +
+  # добавляем стрелку сверху
+  annotate("segment", 
+           x = 1, 
+           xend = length(unique(hw2_data$association_new)), 
+           y = max(hw2_data$length) + 2, 
+           yend = max(hw2_data$length) + 2,
+           arrow = arrow(length = unit(0.5, "cm"))) +
+  annotate("text", 
+           x = length(unique(hw2_data$association_new))/2, 
+           y = max(hw2_data$length) + 2.5,
+           label = "Увеличение средней длины") +
+  # убираем легенду
+  theme(legend.position = "none") +
+  # caption
+  labs(
+    caption = str_wrap("Black dots represent raw data. Red dots and error bars represent (estimated marginal) means ± 95% confidence interval per group. Means not sharing any letter are significantly different by the Tukey-test at the 5% level of significance.", width = 70)
+  )
+```
+
