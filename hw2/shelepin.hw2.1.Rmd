@@ -1,0 +1,206 @@
+# Отчет по домашней работе №2
+
+## Набор данных 1
+
+Клиническое исследование посвящено влиянию диеты на активность фермента амилазы. Добровольцы, согласившиеся принять участие в исследовании, случайным образом были распределены по группам и стали соблюдать определенную диету. Через две недели у всех добровольцев была измерена активность амилазы (условные единицы). Результаты представлены на листе activity, который сохранен в файле hw2.shelepin.data.xlsx.
+
+```{r packages}
+# install.packages("pacman")
+pacman::p_load(readxl, ggplot2, dplyr, nortest, car, tidyverse, scales, emmeans, multcomp, multcompView, gtsummary, knitr)
+```
+
+1. Загрузите необходимые данные из файла hw2.shelepin.data.xlsx
+
+```{r}
+hw2_data <- read_excel("hw2.shelepin.data.xlsx", sheet = "activity")
+kable(summary(hw2_data))
+```
+
+2. Рассчитайте описательные статистики и заполните таблицу
+
+```{r}
+result <- hw2_data %>%
+  group_by(type) %>%
+  summarise(
+    Среднее = mean(rate),
+    Дисперсия = var(rate),
+    Стандартное_отклонение = sd(rate),
+    Объем_выборки = n(),
+    Минимум = min(rate),
+    Максимум = max(rate)
+  )
+
+kable(result)
+```
+
+3. Преобразуйте фактор таким образом, чтобы категории следовали в порядке роста средней активности амилазы. Переименуйте имена категорий для более компактного отображения на графиках (сократите имена, можно использовать аббревиатуры)
+
+```{r}
+means <- aggregate(rate ~ type, data = hw2_data, FUN = mean)
+means <- means[order(means$rate), ]
+
+abbreviations <- c(
+  "белково-бургерная" = "ББ",
+  "раздельное питание" = "РП",
+  "средиземноморская" = "СМ",
+  "фруктово-ягодно-овощная" = "ФЯО"
+)
+
+hw2_data$type_n <- factor(hw2_data$type, 
+                          levels = means$type,
+                          labels = abbreviations[means$type])
+
+# Проверяем результат
+levels(hw2_data$type_n)
+```
+
+```{r}
+result <- hw2_data %>%
+  group_by(type_n) %>%
+  summarise(
+    Среднее = mean(rate),
+    Дисперсия = var(rate),
+    Стандартное_отклонение = sd(rate),
+    Объем_выборки = n(),
+    Минимум = min(rate),
+    Максимум = max(rate)
+  )
+
+# Вывод результата
+kable(result)
+```
+
+4. Сформируйте модель дисперсионного анализа исследуемой зависимости
+
+```{r}
+fit <- lm(rate ~ type_n, data = hw2_data)
+summary(fit)
+```
+5. Проанализируйте характер распределения остатков. Примените три критерия согласия. Приведите p-значения и сделайте итоговый вывод.
+
+```{r}
+residuals <- residuals(fit)
+
+# 1. Критерий Шапиро-Уилка
+shapiro_test <- shapiro.test(residuals)
+# 2. Критерий Лиллиефорса
+lillie <- lillie.test(residuals)
+# 3. Критерий Андерсона-Дарлинга
+ad_test <- ad.test(residuals)
+```
+
+```{r}
+p_values <- data.frame(
+  Test = c("Шапиро-Уилка", "Лиллиефорса", "Андерсона-Дарлинга"),
+  `p-value` = c(shapiro_test$p.value, lillie$p.value, ad_test$p.value)
+)
+kable(p_values, col.names = c("Критерий", "p-value"))
+```
+
+Во всех тестах p-value < 0.05. Следовательно, мы **отвергаем нулевую гипотезу о нормальности распределения**.
+Также посмотрим на Q-Q график и гистограмму остатков.
+
+```{r}
+# Q-Q график
+qqnorm(residuals)
+```
+
+```{r}
+# Гистограмма остатков
+hist(residuals, freq = FALSE)
+```
+Наблюдается **скошенность распределения вправо**.
+
+6. Проведите анализ влияния диеты на активность амилазы с использованием процедуры, соответствующей характеру распределения данных. Укажите название критерия, p-значение и сделайте итоговый вывод.
+
+Так как мы отвергнули нулевую гипотезу о нормальности распределения, воспользуемся **критерием Крускала-Уоллиса**:
+
+```{r}
+kruskal.test(rate ~ type_n, data = hw2_data)
+```
+Нулевая гипотеза в тесте Краскела-Уоллиса предполагает, что все группы имеют одинаковое распределение (или одинаковые медианы). p-value (0.001594) значительно меньше 0.05 -- **мы отвергаем нулевую гипотезу**.  
+Отвержение нулевой гипотезы указывает на то, что существуют статистически значимые различия между группами.
+
+Вывод: Существуют статистически значимые различия в распределении переменной "rate" между четырьмя группами, определенными переменной "type_n". Иными словами, type_n оказывает существенное влияние на rate.
+
+7. Проведите попарные сравнения средних с применением наиболее мощной процедуры, соответствующей распределению данных. Какие пары выборок отличаются по средней активности амилазы?
+
+Воспользуемся **критерием Уилкоксона**:
+
+```{r}
+suppressWarnings(pairwise.wilcox.test(hw2_data$rate, hw2_data$type_n))
+```
+Пары выборок **значительно** отличаются по средней активности, если p-value < 0.05. Это пары:
+
+ФЯО-ББ  
+ФЯО-РП
+
+8. Составьте систему компактных буквенных обозначений, отражающих значимость попарных сравнений.
+
+```{r}
+model_means <- emmeans(object = fit,
+                       specs = "type_n")
+model_means_cld <- cld(object = model_means,
+                       Letters = letters,
+                       alpha = 0.05)
+model_means_cld
+```
+9. Для визуализации результатов попарных сравнений постройте диаграмму размахов с компактными буквенными обозначениями. Отдельные диаграммы должны быть залиты разными цветами. Буквенные обозначения должны располагаться под диаграммами. Сверху от диаграмм разместите стрелку, указывающую в сторону увеличения средней активности амилазы. Вставьте полученный график в итоговый отчет.
+
+```{r}
+model_means_cld <- model_means_cld %>% 
+  mutate(type_n = fct_reorder(type_n, emmean))
+
+hw2_data <- hw2_data %>% 
+  mutate(type_n = fct_relevel(type_n, levels(model_means_cld$type_n)))
+
+ggplot() +
+  scale_y_continuous(
+    name = "Rate",
+    limits = c(0, NA),
+    breaks = pretty_breaks(),
+    expand = expansion(mult = c(0,0.1))
+  ) +
+  scale_x_discrete(
+    name = "Type"
+  ) +
+  theme_classic() +
+  geom_boxplot(
+    data = hw2_data,
+    aes(y = rate, x = type_n, fill = type_n),
+    width = 0.5
+  ) +
+  scale_fill_brewer(palette = "Set3") +
+  geom_point(
+    data = hw2_data,
+    aes(y = rate, x = type_n),
+    shape = 16,
+    alpha = 0.5,
+    position = position_jitter(width = 0.1)
+  ) +
+  geom_text(
+    data = model_means_cld,
+    aes(
+      y = emmean,
+      x = type_n,
+      label = str_trim(.group)
+    ),
+    position = position_nudge(x = 0, y = -24),
+    hjust = 0.5,
+    color = "red"
+  ) +
+  annotate("segment", 
+           x = 1, 
+           xend = length(unique(hw2_data$type_n)), 
+           y = max(hw2_data$rate) + 2, 
+           yend = max(hw2_data$rate) + 2,
+           arrow = arrow(length = unit(0.5, "cm"))) +
+  annotate("text", 
+           x = length(unique(hw2_data$type_n))/2, 
+           y = max(hw2_data$rate) + 6,
+           label = "Увеличение средней активности") +
+  theme(legend.position = "none") +
+  labs(
+    caption = str_wrap("Black dots represent raw data.Means not sharing any letter are significantly different at the 5% level of significance.", width = 70)
+  )
+```

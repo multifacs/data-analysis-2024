@@ -1,0 +1,232 @@
+# Отчет по домашней работе №2
+
+## Набор данных 2
+
+В ходе исследования изучалась размерная структура популяций жужелиц *Pterostichus niger* в разных метообитаниях. Для отлова жужелиц в 5 местообитаниях были установлены почвенные ловушки Барбера, все отловленные особи были измерены. Длина жужелиц (мм), отловленных в разных местообитаниях, представлена на листе carab, который сохранен в файле hw2.shelepin.data.xlsx.
+
+```{r packages}
+# install.packages("pacman")
+pacman::p_load(readxl, ggplot2, dplyr, nortest, car, tidyverse, scales, emmeans, multcomp, multcompView, gtsummary, knitr)
+```
+
+1. Загрузите необходимые данные из файла hw2.shelepin.data.xlsx
+
+```{r}
+hw2_data <- read_excel("hw2.shelepin.data.xlsx", sheet = "carab")
+kable(summary(hw2_data))
+```
+
+2. Рассчитайте описательные статистики и заполните таблицу:
+
+```{r}
+result <- hw2_data %>%
+  group_by(association) %>%
+  summarise(
+    Среднее = mean(length),
+    Дисперсия = var(length),
+    Стандартное_отклонение = sd(length),
+    Объем_выборки = n(),
+    Минимум = min(length),
+    Максимум = max(length)
+  )
+kable(result)
+```
+
+3. Преобразуйте фактор таким образом, чтобы категории следовали в порядке роста средней активности амилазы. Переименуйте имена категорий для более компактного отображения на графиках (сократите имена, можно использовать аббревиатуры)
+
+```{r}
+means <- aggregate(length ~ association, data = hw2_data, FUN = mean)
+means <- means[order(means$length), ]
+
+abbreviations <- c(
+  "Березняк разнотравно-осоковый" = "БРО",
+  "Кленовник снытево-осоково-разнотравный" = "КСОР",
+  "Буковник копытне-снытевый" = "БКС",
+  "Осинник подмаренниково-снытевый" = "ОПС",
+  "Дубняк снытево-разнотравный" = "ДСР",
+  "Кленовник высокотравно-снытевый" = "КВС"
+)
+
+hw2_data$association_n <- factor(hw2_data$association, 
+                           levels = means$association,
+                           labels = abbreviations[means$association])
+
+# Проверяем результат
+levels(hw2_data$association_n)
+```
+
+```{r}
+result <- hw2_data %>%
+  group_by(association_n) %>%
+  summarise(
+    Среднее = mean(length),
+    Дисперсия = var(length),
+    Стандартное_отклонение = sd(length),
+    Объем_выборки = n(),
+    Минимум = min(length),
+    Максимум = max(length)
+  )
+kable(result)
+```
+
+4. Сформируйте модель дисперсионного анализа исследуемой зависимости
+
+```{r}
+fit <- lm(length ~ association_n, data = hw2_data)
+summary(fit)
+```
+5. Проанализируйте характер распределения остатков. Примените три критерия согласия. Приведите p-значения и сделайте итоговый вывод. Проведите анализ гомогенности дисперсии количественной переменной. Приведите название процедуры, p-значение и сделайте вывод.
+
+```{r}
+residuals <- residuals(fit)
+
+# 1. Критерий Шапиро-Уилка
+shapiro_test <- shapiro.test(residuals)
+# 2. Критерий Лиллиефорса
+lillie <- lillie.test(residuals)
+# 3. Критерий Андерсона-Дарлинга
+ad_test <- ad.test(residuals)
+```
+
+```{r}
+p_values <- data.frame(
+  Test = c("Шапиро-Уилка", "Лиллиефорса", "Андерсона-Дарлинга"),
+  `p-value` = c(shapiro_test$p.value, lillie$p.value, ad_test$p.value)
+)
+kable(p_values, col.names = c("Критерий", "p-value"))
+```
+
+Поскольку все три теста показывают p \> 0.05 (0.85, 0.78 и 0.87 соответственно), распределение остатков **можно считать нормальным**.
+
+```{r}
+# Q-Q график
+qqnorm(residuals)
+```
+
+```{r}
+# Гистограмма остатков
+hist(residuals, freq = FALSE)
+```
+
+Наблюдается **распределение, близкое к нормальному**.
+
+Тест на гомогенность дисперсий:
+
+```{r}
+leveneTest(length ~ association_n, hw2_data)
+```
+Дисперсии гомогенны, если p-value > 0.05.  
+F = 1.4893, p \> 0.2 -- **дисперсии гомогенны**.
+
+6. Проведите анализ влияния типа местообитания на длину жужелиц с использованием процедуры, соответствующей характеру распределения данных. Заполните таблицу и сделайте вывод.
+
+ANOVA (ANalysis Of VAriance)
+
+```{r}
+anova_res <- anova(fit)
+anova_res
+```
+
+```{r}
+kable(anova_res)
+```
+
+"association_n" оказывает **статистически значимое влияние** на "length": p-значение крайне мало (< 2,2e-16), что означает, что различия в средней "length" между разными уровнями "association_n" вряд ли возникли случайно.  
+F-value 32,612 указывает на то, что **изменчивость между группами намного больше, чем изменчивость внутри групп**, что еще больше подтверждает вывод о том, что "association_n" является значимым предиктором "length"
+
+Вывод: Результаты ANOVA показывают, что "association_n" существенно влияет на "length". Существуют значимые различия в средней "length" для разных уровней "association_n".
+
+7. Проведите попарные сравнения средних с применением наиболее мощной процедуры, соответствующей распределению данных. Какие пары выборок отличаются по средней длине жужелиц?
+
+Воспользуемся **t-критерием Стьюдента**:
+
+```{r}
+pairwise.t.test(hw2_data$length, hw2_data$association_n)
+```
+Пары выборок **значительно** отличаются по средней длине, если p-value < 0.05. Это пары:
+
+ОПС-БКС  
+ОПС-КВС  
+ОПС-БРО  
+ОПС-ДРС  
+КСОР-КВС  
+КСОР-БРО  
+КСОР-ДСР  
+БКС-КВС  
+БКС-БРО  
+БКС-ДСР  
+КВС-ДСР  
+БРО-ДСР
+
+8. Составьте систему компактных буквенных обозначений, отражающих значимость попарных сравнений.
+
+```{r}
+model <- lm(length ~ association_n, data = hw2_data)
+model_means <- emmeans(object = model,
+                       specs = "association_n")
+model_means_cld <- cld(object = model_means,
+                       Letters = letters,
+                       alpha = 0.05)
+model_means_cld
+```
+
+9. Для визуализации результатов попарных сравнений постройте столбчатую диаграмму с доверительными интервалами и компактными буквенными обозначениями. Стоблцы должны быть залиты разными цветами. Вставьте полученный график в итоговый отчет.
+
+```{r}
+model_means_cld <- model_means_cld %>% 
+  mutate(association_n = fct_reorder(association_n, emmean))
+
+hw2_data <- hw2_data %>% 
+  mutate(association_n = fct_relevel(association_n, levels(model_means_cld$association_n)))
+
+ggplot() +
+  scale_y_continuous(
+    name = "Length",
+    limits = c(0, NA),
+    breaks = pretty_breaks(),
+    expand = expansion(mult = c(0,0.1))
+  ) +
+  scale_x_discrete(
+    name = "Association"
+  ) +
+  theme_classic() +
+  geom_boxplot(
+    data = hw2_data,
+    aes(y = length, x = association_n, fill = association_n),
+    width = 0.5,
+    outlier.shape = NA
+  ) +
+  scale_fill_brewer(palette = "Set3") +
+  geom_point(
+    data = hw2_data,
+    aes(y = length, x = association_n),
+    shape = 16,
+    alpha = 0.5,
+    position = position_jitter(width = 0.1)
+  ) +
+  geom_text(
+    data = model_means_cld,
+    aes(
+      y = emmean,
+      x = association_n,
+      label = str_trim(.group)
+    ),
+    position = position_nudge(x = 0, y = -3),
+    hjust = 0.5,
+    color = "red"
+  ) +
+  annotate("segment", 
+           x = 1, 
+           xend = length(unique(hw2_data$association_n)), 
+           y = max(hw2_data$length) + 2, 
+           yend = max(hw2_data$length) + 2,
+           arrow = arrow(length = unit(0.5, "cm"))) +
+  annotate("text", 
+           x = length(unique(hw2_data$association_n))/2, 
+           y = max(hw2_data$length) + 2.5,
+           label = "Увеличение средней длины") +
+  theme(legend.position = "none") +
+  labs(
+    caption = str_wrap("Black dots represent raw data. Means not sharing any letter are significantly different.", width = 70)
+  )
+```
