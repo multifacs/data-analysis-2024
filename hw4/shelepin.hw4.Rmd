@@ -4,7 +4,7 @@
 
 ```{r packages}
 # install.packages("pacman")
-pacman::p_load(readxl, ggplot2, dplyr, nortest, car, tidyverse, scales, emmeans, multcomp, multcompView, gtsummary, knitr)
+pacman::p_load(readxl, ggplot2, dplyr, nortest, car, tidyverse, scales, emmeans, multcomp, multcompView, gtsummary, knitr, effects)
 ```
 
 1. Загрузите данные из файла hw4.shelepin.data.xlsx.
@@ -115,26 +115,103 @@ kable(p_values2, col.names = c("Критерий", "p-value"))
 
 6. Проведите статистический анализ модели. Для каждого компонента модели в комментарии приведите p-значение и сделайте вывод о значимости.
 
+Тест Бройша-Пагана:
+
 ```{r}
-leveneTest(loss ~ acidity * species_short, worms)
+ncvRes <- ncvTest(fit2)
+ncvRes
 ```
-
-Дисперсии гомогенны, если p-value > 0.05.  
-F = 1.0666, p = 0.3754 -- **дисперсии гомогенны**.
-
-ANOVA (ANalysis Of VAriance)
-
 ```{r}
-anova_res2 <- anova(fit2)
-anova_res2
+bp_p_value <- ncvRes$p
+cat("p-значение теста Бройша-Пагана:", bp_p_value, "\n")
 ```
 
 ```{r}
-kable(anova_res2)
+if (bp_p_value > 0.05) {
+  cat("p-value > 0.05. Значимых признаков гетероскедастичности нет.\n")
+} else {
+  cat("p-value < 0.05. Есть значимые признаки гетероскедастичности.\n")
+}
 ```
+```{r}
+# Coefficients:
+#                         Estimate Std. Error t value Pr(>|t|)    
+# (Intercept)             15.45457    0.54150  28.541  < 2e-16 ***
+# species_shortEB          2.52538    1.10061   2.295   0.0285 *  
+# species_shortLR          0.69136    0.79603   0.869   0.3916    
+# species_shortAC         -1.07476    0.85799  -1.253   0.2194    
+# acidity                 -0.87768    0.07191 -12.206  1.4e-13 ***
+# species_shortEB:acidity -0.22216    0.13862  -1.603   0.1189    
+# species_shortLR:acidity  0.09575    0.10478   0.914   0.3676    
+# species_shortAC:acidity  0.15836    0.10978   1.442   0.1589    
+```
+
+1. Значимые эффекты (p < 0.05):
+- Intercept (p < 2e-16) *** -- базовый уровень (для вида AL)
+- species_shortEB (p = 0.0285) * -- вид EB значимо отличается от базового вида AL
+- acidity (p = 1.4e-13) *** -- кислотность имеет сильное значимое влияние на разложение
+
+2. Незначимые эффекты (p > 0.05):
+- species_shortLR (p = 0.3916) -- вид LR значимо не отличается от AL
+- species_shortAC (p = 0.2194) -- вид AC значимо не отличается от AL
+- Все взаимодействия видов с кислотностью незначимы:
+  * species_shortEB:acidity (p = 0.1189)
+  * species_shortLR:acidity (p = 0.3676)
+  * species_shortAC:acidity (p = 0.1589)
+
+Общие выводы:
+
+1. Кислотность оказывает сильное влияние на скорость разложения
+2. Только вид EB значимо отличается от контрольного вида AL
+3. Взаимодействия между видом и кислотностью не значимы, то есть все виды червей примерно одинаково реагируют на изменение кислотности
+
+Модель в целом очень хорошая ($R^2$ = 0.938, общий p-value < 2.2e-16).
 
 7. Постройте график взаимодействия фактора и ковариаты.
 
+```{r}
+ef<-effect("species_short * acidity", fit2)
+plot(ef, multiline=TRUE, ci.style="bars")
+```
+8.	Как изменилось p-значение при анализе значимости влияния доминирующего в почве вида дождевых червей после учета влияния кислотности почвы?
+
+```{r}
+table(worms$species_short)
+```
+
+
+9.	Если эффект взаимодействия фактора и ковариаты незначим, сформируйте итоговую модель анализа ковариации без учета взаимодействия.
+
+```{r}
+fit3 <- lm(loss ~ species_short + acidity, data = worms)
+summary(fit3)
+```
+
+```{r}
+anova(fit3, fit2)
+```
+
+```{r}
+AIC(fit3, fit2)
+```
+
+10.	Проанализируйте итоговую модель, значимо ли влияние фактора?
+
+
+
+11.	Постройте итоговые графики эффекта доминирующего в почве вида дождевых червей и кислотности почвы. Опишите в комментарии, в чем заключается зависимость скорости разложения опада от кислотности почвы.
+
+```{r}
+ef_species <- effect("species_short", fit3)
+ef_acidity <- effect("acidity", fit3)
+
+plot(ef_species)
+plot(ef_acidity)
+```
+```{r}
+ef <- allEffects(fit3)
+plot(ef)
+```
 
 
 

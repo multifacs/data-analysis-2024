@@ -589,9 +589,7 @@ kable(p_values, col.names = c(&quot;Критерий&quot;, &quot;p-value&quot;)
 </tr>
 </tbody>
 </table>
-</div>
-<div id="p-value-005-распределение-гомогенное" class="section level1">
-<h1>p-value &gt; 0,05 распределение гомогенное</h1>
+<p>p-value &gt; 0,05 – <strong>распределение нормальное</strong>.</p>
 <pre class="r"><code>leveneTest(loss ~ species_short, worms)</code></pre>
 <pre><code>## Levene&#39;s Test for Homogeneity of Variance (center = median)
 ##       Df F value Pr(&gt;F)
@@ -641,6 +639,143 @@ anova_res</code></pre>
 </table>
 <p>p-value = 0.15 &gt; 0.05 – влияние доминирующего в почве вида
 дождевых червей <strong>статистически незначимо</strong>.</p>
+<ol start="4" style="list-style-type: decimal">
+<li>Сформируйте полную модель анализа ковариации исследуемой зависимости
+с учетом влияния кислотности почвы и эффекта взаимодействия.</li>
+</ol>
+<pre class="r"><code>fit2 &lt;- lm(loss ~ species_short * acidity, data = worms)
+summary(fit2)</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = loss ~ species_short * acidity, data = worms)
+## 
+## Residuals:
+##      Min       1Q   Median       3Q      Max 
+## -0.83010 -0.31916 -0.02926  0.21473  0.93393 
+## 
+## Coefficients:
+##                         Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)             15.45457    0.54150  28.541  &lt; 2e-16 ***
+## species_shortEB          2.52538    1.10061   2.295   0.0285 *  
+## species_shortLR          0.69136    0.79603   0.869   0.3916    
+## species_shortAC         -1.07476    0.85799  -1.253   0.2194    
+## acidity                 -0.87768    0.07191 -12.206  1.4e-13 ***
+## species_shortEB:acidity -0.22216    0.13862  -1.603   0.1189    
+## species_shortLR:acidity  0.09575    0.10478   0.914   0.3676    
+## species_shortAC:acidity  0.15836    0.10978   1.442   0.1589    
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 0.4595 on 32 degrees of freedom
+## Multiple R-squared:  0.938,  Adjusted R-squared:  0.9245 
+## F-statistic: 69.19 on 7 and 32 DF,  p-value: &lt; 2.2e-16</code></pre>
+<ol start="5" style="list-style-type: decimal">
+<li>Проанализируйте характер распределения остатков. Примените три
+критерия согласия. Приведите p-значения и сделайте итоговый вывод.</li>
+</ol>
+<pre class="r"><code>residuals2 &lt;- residuals(fit2)
+
+# 1. Критерий Шапиро-Уилка
+shapiro_test2 &lt;- shapiro.test(residuals2)
+# 2. Критерий Лиллиефорса
+lillie2 &lt;- lillie.test(residuals2)
+# 3. Критерий Андерсона-Дарлинга
+ad_test2 &lt;- ad.test(residuals2)</code></pre>
+<pre class="r"><code>p_values2 &lt;- data.frame(
+  Test = c(&quot;Шапиро-Уилка&quot;, &quot;Лиллиефорса&quot;, &quot;Андерсона-Дарлинга&quot;),
+  `p-value` = c(shapiro_test2$p.value, lillie2$p.value, ad_test2$p.value)
+)
+kable(p_values2, col.names = c(&quot;Критерий&quot;, &quot;p-value&quot;))</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Критерий</th>
+<th align="right">p-value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Шапиро-Уилка</td>
+<td align="right">0.5605371</td>
+</tr>
+<tr class="even">
+<td align="left">Лиллиефорса</td>
+<td align="right">0.4775577</td>
+</tr>
+<tr class="odd">
+<td align="left">Андерсона-Дарлинга</td>
+<td align="right">0.4395919</td>
+</tr>
+</tbody>
+</table>
+<p>p-value &gt; 0,05 – <strong>распределение нормальное</strong>.</p>
+<ol start="6" style="list-style-type: decimal">
+<li>Проведите статистический анализ модели. Для каждого компонента
+модели в комментарии приведите p-значение и сделайте вывод о
+значимости.</li>
+</ol>
+<p>Тест Бройша-Пагана:</p>
+<pre class="r"><code>ncvRes &lt;- ncvTest(fit2)
+ncvRes</code></pre>
+<pre><code>## Non-constant Variance Score Test 
+## Variance formula: ~ fitted.values 
+## Chisquare = 0.1147002, Df = 1, p = 0.73486</code></pre>
+<pre class="r"><code>bp_p_value &lt;- ncvRes$p
+cat(&quot;p-значение теста Бройша-Пагана:&quot;, bp_p_value, &quot;\n&quot;)</code></pre>
+<pre><code>## p-значение теста Бройша-Пагана: 0.7348551</code></pre>
+<pre class="r"><code>if (bp_p_value &gt; 0.05) {
+  cat(&quot;p-value &gt; 0.05. Значимых признаков гетероскедастичности нет.\n&quot;)
+} else {
+  cat(&quot;p-value &lt; 0.05. Есть значимые признаки гетероскедастичности.\n&quot;)
+}</code></pre>
+<pre><code>## p-value &gt; 0.05. Значимых признаков гетероскедастичности нет.</code></pre>
+<pre class="r"><code># Coefficients:
+#                         Estimate Std. Error t value Pr(&gt;|t|)    
+# (Intercept)             15.45457    0.54150  28.541  &lt; 2e-16 ***
+# species_shortEB          2.52538    1.10061   2.295   0.0285 *  
+# species_shortLR          0.69136    0.79603   0.869   0.3916    
+# species_shortAC         -1.07476    0.85799  -1.253   0.2194    
+# acidity                 -0.87768    0.07191 -12.206  1.4e-13 ***
+# species_shortEB:acidity -0.22216    0.13862  -1.603   0.1189    
+# species_shortLR:acidity  0.09575    0.10478   0.914   0.3676    
+# species_shortAC:acidity  0.15836    0.10978   1.442   0.1589    </code></pre>
+<ol style="list-style-type: decimal">
+<li>Значимые эффекты (p &lt; 0.05):</li>
+</ol>
+<ul>
+<li>Intercept (p &lt; 2e-16) *** – базовый уровень (для вида AL)</li>
+<li>species_shortEB (p = 0.0285) * – вид EB значимо отличается от
+базового вида AL</li>
+<li>acidity (p = 1.4e-13) *** – кислотность имеет сильное значимое
+влияние на разложение</li>
+</ul>
+<ol start="2" style="list-style-type: decimal">
+<li>Незначимые эффекты (p &gt; 0.05):</li>
+</ol>
+<ul>
+<li>species_shortLR (p = 0.3916) – вид LR значимо не отличается от
+AL</li>
+<li>species_shortAC (p = 0.2194) – вид AC значимо не отличается от
+AL</li>
+<li>Все взаимодействия видов с кислотностью незначимы:
+<ul>
+<li>species_shortEB:acidity (p = 0.1189)</li>
+<li>species_shortLR:acidity (p = 0.3676)</li>
+<li>species_shortAC:acidity (p = 0.1589)</li>
+</ul></li>
+</ul>
+<p>Общие выводы:</p>
+<ol style="list-style-type: decimal">
+<li>Кислотность оказывает сильное влияние на скорость разложения</li>
+<li>Только вид EB значимо отличается от контрольного вида AL</li>
+<li>Взаимодействия между видом и кислотностью не значимы, то есть все
+виды червей примерно одинаково реагируют на изменение кислотности</li>
+</ol>
+<p>Модель в целом очень хорошая (<span class="math inline">\(R^2\)</span> = 0.938, общий p-value &lt;
+2.2e-16).</p>
+<ol start="7" style="list-style-type: decimal">
+<li>Постройте график взаимодействия фактора и ковариаты.</li>
+</ol>
 </div>
 
 
